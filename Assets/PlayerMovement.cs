@@ -28,6 +28,8 @@ public class PlayerMovement : MonoBehaviour
 
     public Transform orientation;
 
+    [SerializeField] private Transform playerCam;
+
     // To hold your input
     float horizontalInput;
     float verticalInput;
@@ -50,6 +52,7 @@ public class PlayerMovement : MonoBehaviour
         GroundDrag();
         MyInput(); // This will keep checking allowed input for all movement
         SpeedControl();
+        RotatePlayer();
     }
 
     private void FixedUpdate()
@@ -120,5 +123,14 @@ public class PlayerMovement : MonoBehaviour
 
         // Apply drag when grounded
         rb.drag = grounded ? groundDrag : 0;
+    }
+
+    private void RotatePlayer()
+    {
+        if (playerCam != null)
+        {
+            // Set the Rigidbody's rotation to match the PlayerCam's rotation
+            rb.rotation = Quaternion.Euler(0f, playerCam.eulerAngles.y, 0f);
+        }
     }
 }

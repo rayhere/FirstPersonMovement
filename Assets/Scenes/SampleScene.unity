@@ -220,6 +220,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 256
   orientation: {fileID: 1744980539}
+  playerCam: {fileID: 963194228}
 --- !u!54 &205751057
 Rigidbody:
   m_ObjectHideFlags: 0
