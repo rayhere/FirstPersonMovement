@@ -7,18 +7,18 @@ public class PlayerMovementAdvanced : MonoBehaviour
 {
     [Header("Movement")]
     private float moveSpeed;
+    public float groundDrag;
     public float walkSpeed;
     public float sprintSpeed;
+    
+    public float slideSpeed;
+    private float desiredMoveSpeed;
+    private float lastDesiredMoveSpeed;
+    public float speedIncreaseMultiplier;
+    public float slopeIncreaseMultiplier;
 
-    public float slideSpeed; // new
-    private float desiredMoveSpeed; // new
-    private float lastDesiredMoveSpeed; // new
-
-    public float speedIncreaseMultiplier; // new
-    public float slopeIncreaseMultiplier; // new
-
-    public float groundDrag;
-
+    public float wallrunSpeed; // new
+    
     [Header("Jumping")]
     public float jumpForce;
     public float jumpCooldown;
@@ -45,7 +45,6 @@ public class PlayerMovementAdvanced : MonoBehaviour
     private RaycastHit slopeHit;
     private bool exitingSlope;
     
-
     public Transform orientation;
 
     float horizontalInput;
@@ -60,12 +59,15 @@ public class PlayerMovementAdvanced : MonoBehaviour
     {
         walking,
         sprinting,
+        wallrunning, // new
         crouching,
-        sliding, // new
+        sliding,
         air
     }
 
-    public bool sliding; // new
+    public bool crouching;
+    public bool sliding;
+    public bool wallrunning; // new
 
     // Parameters for ground check
     public float groundCheckDistance = 0.5f; // The distance to check for ground
@@ -144,6 +146,13 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
     private void StateHandler()
     {
+        // Mode - Wallrunning
+        if (wallrunning)
+        {
+            state = MovementState.wallrunning;
+            desiredMoveSpeed = wallrunSpeed;
+        }
+        
         // Mode - Sliding
         if (sliding) // new
         {
