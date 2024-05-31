@@ -10,6 +10,13 @@ public class PlayerMovementAdvanced : MonoBehaviour
     public float walkSpeed;
     public float sprintSpeed;
 
+    public float slideSpeed; // new
+    private float desiredMoveSpeed; // new
+    private float lastDesiredMoveSpeed; // new
+
+    public float speedIncreaseMultiplier; // new
+    public float slopeIncreaseMultiplier; // new
+
     public float groundDrag;
 
     [Header("Jumping")]
@@ -54,8 +61,20 @@ public class PlayerMovementAdvanced : MonoBehaviour
         walking,
         sprinting,
         crouching,
+        sliding, // new
         air
     }
+
+    public bool sliding; // new
+
+    // Parameters for ground check
+    public float groundCheckDistance = 0.5f; // The distance to check for ground
+    public int numRaycasts = 5; // Number of raycasts to cast
+    public float slopeThreshold = 30f; // The maximum slope angle that is considered as walkable
+
+    // Ground check variables
+    //bool grounded;
+    bool onSteepGround;
 
     private void Start()
     {
@@ -69,8 +88,10 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
     private void Update()
     {
+        // Perform ground check
+        GroundCheck();
         // ground check
-        grounded = Physics.Raycast(transform.position, Vector3.down, playerHeight * 0.5f + 0.2f, whatIsGround);
+        //grounded = Physics.Raycast(transform.position, Vector3.down, playerHeight * 0.5f + 0.2f, whatIsGround);
 
         MyInput();
         SpeedControl();
@@ -94,10 +115,14 @@ public class PlayerMovementAdvanced : MonoBehaviour
         verticalInput = Input.GetAxisRaw("Vertical");
 
         // when to jump
-        if(Input.GetKey(jumpKey) && readyToJump && grounded)
+        if(Input.GetKeyUp(jumpKey) && !grounded){
+            Debug.Log("Jumped, but not ground");
+            Debug.Log("Jumped, onSteepGround is " + onSteepGround);
+        }
+        else if(Input.GetKey(jumpKey) && readyToJump && grounded)
         {
             readyToJump = false;
-
+            //SDebug.Log("Jumped, on ground");
             Jump();
 
             Invoke(nameof(ResetJump), jumpCooldown);
@@ -119,25 +144,37 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
     private void StateHandler()
     {
+        // Mode - Sliding
+        if (sliding) // new
+        {
+            state = MovementState.sliding;
+
+            if (OnSlope() && rb.velocity.y < 0.1f)
+                desiredMoveSpeed = slideSpeed; 
+
+            else
+                desiredMoveSpeed = sprintSpeed;
+        }
+
         // Mode - Crouching
-        if (Input.GetKey(crouchKey))
+        else if (Input.GetKey(crouchKey)) // change to else if
         {
             state = MovementState.crouching;
-            moveSpeed = crouchSpeed;
+            desiredMoveSpeed = crouchSpeed; // moveSpeed to desiredMoveSpeed
         }
 
         // Mode - Sprinting
         else if(grounded && Input.GetKey(sprintKey))
         {
             state = MovementState.sprinting;
-            moveSpeed = sprintSpeed;
+            desiredMoveSpeed = sprintSpeed; // moveSpeed to desiredMoveSpeed
         }
 
         // Mode - Walking
         else if (grounded)
         {
             state = MovementState.walking;
-            moveSpeed = walkSpeed;
+            desiredMoveSpeed = walkSpeed;
         }
 
         // Mode - Air
@@ -145,6 +182,46 @@ public class PlayerMovementAdvanced : MonoBehaviour
         {
             state = MovementState.air;
         }
+
+        // check if desiredMoveSpeed has changed drastically
+        if(Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed) > 4f && moveSpeed != 0)
+        {
+            StopAllCoroutines();
+            StartCoroutine(SmoothlyLerpMoveSpeed());
+        }
+        else
+        {
+            moveSpeed = desiredMoveSpeed;
+        }
+
+        lastDesiredMoveSpeed = desiredMoveSpeed;
+    }
+
+    private IEnumerator SmoothlyLerpMoveSpeed()
+    {
+        // smoothly lerp movementSpeed to desired value
+        float time = 0;
+        float difference = Mathf.Abs(desiredMoveSpeed - moveSpeed);
+        float startValue = moveSpeed;
+
+        while (time < difference)
+        {
+            moveSpeed = Mathf.Lerp(startValue, desiredMoveSpeed, time / difference);
+
+            if (OnSlope())
+            {
+                float slopeAngle = Vector3.Angle(Vector3.up, slopeHit.normal);
+                float slopeAngleIncrease = 1 + (slopeAngle / 90f);
+
+                time += Time.deltaTime * speedIncreaseMultiplier * slopeIncreaseMultiplier * slopeAngleIncrease;
+            }
+            else
+                time += Time.deltaTime * speedIncreaseMultiplier;
+
+            yield return null;
+        }
+
+        moveSpeed = desiredMoveSpeed;
     }
 
     private void MovePlayer()
@@ -155,7 +232,7 @@ public class PlayerMovementAdvanced : MonoBehaviour
         // on slope
         if (OnSlope() && !exitingSlope)
         {
-            rb.AddForce(GetSlopeMoveDirection() * moveSpeed * 20f, ForceMode.Force);
+            rb.AddForce(GetSlopeMoveDirection(moveDirection) * moveSpeed * 20f, ForceMode.Force);
 
             // since we turn off the gravity on slope
             // if the player is moving upwards which means its y velocity is greater than zero
@@ -215,7 +292,7 @@ public class PlayerMovementAdvanced : MonoBehaviour
         exitingSlope = false;
     }
 
-    private bool OnSlope()
+    public bool OnSlope()
     {
         if(Physics.Raycast(transform.position, Vector3.down, out slopeHit, playerHeight * 0.5f + 0.3f))
         {
@@ -228,8 +305,64 @@ public class PlayerMovementAdvanced : MonoBehaviour
         return false;
     }
 
-    private Vector3 GetSlopeMoveDirection()
+    public Vector3 GetSlopeMoveDirection(Vector3 direction)
     {
-        return Vector3.ProjectOnPlane(moveDirection, slopeHit.normal).normalized;
+        return Vector3.ProjectOnPlane(direction, slopeHit.normal).normalized;
+    }
+
+    private void GroundCheck2()
+    {
+        grounded = false;
+        onSteepGround = false;
+
+        // Cast multiple rays downward from the player's position
+        for (int i = 0; i < numRaycasts; i++)
+        {
+            float angle = i * (360f / numRaycasts); // Calculate angle for raycast direction
+            Vector3 direction = Quaternion.AngleAxis(angle, transform.up) * -transform.forward; // Calculate raycast direction
+
+            //groundCheckDistance = playerHeight * 0.5f + 0.2f;
+
+            RaycastHit hit;
+            if (Physics.Raycast(transform.position, Vector3.down, out hit, playerHeight * 0.5f + 0.2f, whatIsGround))
+            //if (Physics.Raycast(transform.position, direction, out hit, groundCheckDistance, whatIsGround))
+            {
+                grounded = true;
+
+                // Check if the slope angle exceeds the threshold
+                float slopeAngle = Vector3.Angle(hit.normal, Vector3.up);
+                if (slopeAngle > slopeThreshold)
+                {
+                    onSteepGround = true;
+                    break; // Exit loop if a steep slope is detected
+                }
+            }
+        }
+    }
+
+    private void GroundCheck() // work
+    {
+        // Cast a single raycast straight down from the player's position
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position, Vector3.down, out hit, playerHeight * 0.5f + 0.2f, whatIsGround))
+        {
+            grounded = true;
+
+            // Check if the slope angle exceeds the threshold
+            float slopeAngle = Vector3.Angle(hit.normal, Vector3.up);
+            if (slopeAngle > maxSlopeAngle)
+            {
+                onSteepGround = true;
+            }
+            else
+            {
+                onSteepGround = false;
+            }
+        }
+        else
+        {
+            grounded = false;
+            onSteepGround = false;
+        }
     }
 }
