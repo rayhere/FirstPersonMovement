@@ -10,15 +10,15 @@ public class PlayerMovementAdvanced : MonoBehaviour
     public float groundDrag;
     public float walkSpeed;
     public float sprintSpeed;
-    
+    public float wallrunSpeed; 
+    public float climbSpeed; // new
     public float slideSpeed;
     private float desiredMoveSpeed;
     private float lastDesiredMoveSpeed;
+
     public float speedIncreaseMultiplier;
     public float slopeIncreaseMultiplier;
 
-    public float wallrunSpeed; // new
-    
     [Header("Jumping")]
     public float jumpForce;
     public float jumpCooldown;
@@ -38,13 +38,16 @@ public class PlayerMovementAdvanced : MonoBehaviour
     [Header("Ground Check")]
     public float playerHeight;
     public LayerMask whatIsGround;
-    bool grounded;
+    public bool grounded;
 
     [Header("Slope Handling")]
     public float maxSlopeAngle;
     private RaycastHit slopeHit;
     private bool exitingSlope;
     
+    [Header("References")]
+    public Climbing climbingScript;
+
     public Transform orientation;
 
     float horizontalInput;
@@ -59,7 +62,8 @@ public class PlayerMovementAdvanced : MonoBehaviour
     {
         walking,
         sprinting,
-        wallrunning, // new
+        wallrunning,
+        climbing, // new
         crouching,
         sliding,
         air
@@ -67,7 +71,8 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
     public bool crouching;
     public bool sliding;
-    public bool wallrunning; // new
+    public bool wallrunning;
+    public bool climbing; // new
 
     // Parameters for ground check
     public float groundCheckDistance = 0.5f; // The distance to check for ground
@@ -133,6 +138,7 @@ public class PlayerMovementAdvanced : MonoBehaviour
         // start crouch
         if (Input.GetKeyDown(crouchKey))
         {
+            crouching = true;
             transform.localScale = new Vector3(transform.localScale.x, crouchYScale, transform.localScale.z);
             rb.AddForce(Vector3.down * 5f, ForceMode.Impulse);
         }
@@ -140,21 +146,29 @@ public class PlayerMovementAdvanced : MonoBehaviour
         // stop crouch
         if (Input.GetKeyUp(crouchKey))
         {
+            crouching = false;
             transform.localScale = new Vector3(transform.localScale.x, startYScale, transform.localScale.z);
         }
     }
 
     private void StateHandler()
     {
+        // Mode - Climbing
+        if (climbing) // New
+        {
+            state = MovementState.climbing;
+            desiredMoveSpeed = climbSpeed;
+        }
+
         // Mode - Wallrunning
-        if (wallrunning)
+        else if (wallrunning)
         {
             state = MovementState.wallrunning;
             desiredMoveSpeed = wallrunSpeed;
         }
 
         // Mode - Sliding
-        if (sliding) // new
+        if (sliding) 
         {
             state = MovementState.sliding;
 
@@ -166,7 +180,7 @@ public class PlayerMovementAdvanced : MonoBehaviour
         }
 
         // Mode - Crouching
-        else if (Input.GetKey(crouchKey)) // change to else if
+        else if (Input.GetKey(crouchKey)) 
         {
             state = MovementState.crouching;
             desiredMoveSpeed = crouchSpeed; // moveSpeed to desiredMoveSpeed
@@ -235,6 +249,8 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
     private void MovePlayer()
     {
+        if (climbingScript.exitingWall) return;
+
         // calculate movement direction
         moveDirection = orientation.forward * verticalInput + orientation.right * horizontalInput;
 
