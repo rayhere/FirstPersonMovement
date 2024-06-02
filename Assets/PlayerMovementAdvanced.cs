@@ -60,10 +60,12 @@ public class PlayerMovementAdvanced : MonoBehaviour
     public MovementState state;
     public enum MovementState
     {
+        freeze, // new
+        unlimited, // new
         walking,
         sprinting,
         wallrunning,
-        climbing, // new
+        climbing,
         crouching,
         sliding,
         air
@@ -72,7 +74,11 @@ public class PlayerMovementAdvanced : MonoBehaviour
     public bool crouching;
     public bool sliding;
     public bool wallrunning;
-    public bool climbing; // new
+    public bool climbing;
+    public bool freeze; // new
+    public bool unlimited; // new
+    public bool restricted; // new
+    bool keepMomentum; // new
 
     // Parameters for ground check
     public float groundCheckDistance = 0.5f; // The distance to check for ground
@@ -153,8 +159,24 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
     private void StateHandler()
     {
+        // Mode - Freeze
+        if (freeze) // New
+        {
+            state = MovementState.freeze;
+            rb.velocity = Vector3.zero;
+            desiredMoveSpeed = 0f;
+        }
+
+        // Mode - Unlimited
+        else if (unlimited) // New
+        {
+            state = MovementState.unlimited;
+            desiredMoveSpeed = 999f;
+            return;
+        }
+
         // Mode - Climbing
-        if (climbing) // New
+        else if (climbing)
         {
             state = MovementState.climbing;
             desiredMoveSpeed = climbSpeed;
@@ -173,8 +195,10 @@ public class PlayerMovementAdvanced : MonoBehaviour
             state = MovementState.sliding;
 
             if (OnSlope() && rb.velocity.y < 0.1f)
+            {
                 desiredMoveSpeed = slideSpeed; 
-
+                keepMomentum = true;
+            }
             else
                 desiredMoveSpeed = sprintSpeed;
         }
@@ -204,20 +228,33 @@ public class PlayerMovementAdvanced : MonoBehaviour
         else
         {
             state = MovementState.air;
+
+            if (desiredMoveSpeed < sprintSpeed)
+                desiredMoveSpeed = walkSpeed;
+            else
+                desiredMoveSpeed = sprintSpeed;
         }
 
         // check if desiredMoveSpeed has changed drastically
-        if(Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed) > 4f && moveSpeed != 0)
+        //if(Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed) > 4f && moveSpeed != 0)
+        bool desiredMoveSpeedHasChanged = desiredMoveSpeed != lastDesiredMoveSpeed;
+        if (desiredMoveSpeedHasChanged)
         {
-            StopAllCoroutines();
-            StartCoroutine(SmoothlyLerpMoveSpeed());
-        }
-        else
-        {
-            moveSpeed = desiredMoveSpeed;
+            if (keepMomentum)
+            {
+                StopAllCoroutines();
+                StartCoroutine(SmoothlyLerpMoveSpeed());
+            }
+            else
+            {
+                moveSpeed = desiredMoveSpeed;
+            }
         }
 
         lastDesiredMoveSpeed = desiredMoveSpeed;
+
+        // deactivate keepMomentum
+        if (Mathf.Abs(desiredMoveSpeed - moveSpeed) < 0.1f) keepMomentum = false;
     }
 
     private IEnumerator SmoothlyLerpMoveSpeed()
@@ -249,6 +286,8 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
     private void MovePlayer()
     {
+        if (restricted) return;
+
         if (climbingScript.exitingWall) return;
 
         // calculate movement direction
@@ -310,6 +349,7 @@ public class PlayerMovementAdvanced : MonoBehaviour
 
         rb.AddForce(transform.up * jumpForce, ForceMode.Impulse);
     }
+    
     private void ResetJump()
     {
         readyToJump = true;

@@ -12,14 +12,14 @@ TagManager:
   - Water
   - UI
   - 
-  - 
-  - Ground
-  - Wall
-  - 
-  - 
-  - 
-  - 
-  - 
+  - whatIsPlayer
+  - whatIsGround
+  - whatIsWall
+  - whatIsLedge
+  - whatIsKnife
+  - postProcessing
+  - dontRender
+  - bloom
   - 
   - 
   - 
